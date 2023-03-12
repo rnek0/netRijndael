@@ -1,80 +1,97 @@
 using System;
+using System.Text;
+using System.IO;
 using System.Security.Cryptography;
 
 namespace Rijndael.libs
 {
     public class MiRijndael
     {
-        // Le salt pour la clé de chiffrement (a toi de voir pour plus complexe ou pour demander en arg).
-        private static byte[] saltArray = new byte[8] { 1, 2, 3, 4, 5, 6, 7, 8 };
-
-        // Clé generée a l'encriptation. = byte[32];
-        private static byte[] clepseudoaleatoire;
-
-        // Encripte après mise en forme de la clé.
-
-        public static byte[] Encriptar(string strEncriptar, string strPK)
+        public static byte[] EncryptStringToBytes_Aes(string plainText, byte[] Key, byte[] IV)
         {
-            clepseudoaleatoire = (new Rfc2898DeriveBytes(strPK, saltArray)).GetBytes(32);
-            return Encriptar(strEncriptar, clepseudoaleatoire);
-        }
-
-        // Prends la chaine passée en paramettre et la clé de 32 bytes mise en forme et crypte.         
-        public static byte[] Encriptar(string strEncriptar, byte[] bytPK)
-        {
-            byte[] encrypted = null;
-            byte[] returnValue = null;
-
-            using (System.Security.Cryptography.Aes miRijndael = Aes.Create())
-            {
-                miRijndael.Key = bytPK;
-                miRijndael.GenerateIV();
-
-                byte[] toEncrypt = System.Text.Encoding.Unicode.GetBytes(strEncriptar);
-                encrypted = (miRijndael.CreateEncryptor()).TransformFinalBlock(toEncrypt, 0, toEncrypt.Length);
-
-                // On recupère le IV pour un decriptage futur (ajouté a la chaine cryptée).
-                returnValue = new byte[miRijndael.IV.Length + encrypted.Length];
-                miRijndael.IV.CopyTo(returnValue, 0);
-                encrypted.CopyTo(returnValue, miRijndael.IV.Length);
-            }
-
-            return returnValue;
-        }
-
-        // Decripte.
-        public static string Desencriptar(byte[] bytDesEncriptar, byte[] bytPK)
-        {
-            string returnValue = string.Empty;
-            System.Security.Cryptography.Aes miRijndael = Aes.Create();
-
-            if(bytDesEncriptar.Length > 0) // TODO: verifier la longueur des arrays !
-            {
-                byte[] tempArray = new byte[miRijndael.IV.Length];
-                byte[] encrypted = new byte[bytDesEncriptar.Length - miRijndael.IV.Length];   
-            try
-            {
-                miRijndael.Key = bytPK;
-                //Recupère le IV dans la chaine cryptée.
-                Array.Copy(bytDesEncriptar, tempArray, tempArray.Length);
-                Array.Copy(bytDesEncriptar, tempArray.Length, encrypted, 0, encrypted.Length);
-                miRijndael.IV = tempArray;
+            // Check arguments.
+            if (plainText == null || plainText.Length <= 0)
+                throw new ArgumentNullException("plainText");
                 
-                returnValue = System.Text.Encoding.Unicode.GetString((miRijndael.CreateDecryptor()).TransformFinalBlock(encrypted, 0, encrypted.Length));
+            if (Key == null || Key.Length <= 0)
+                throw new ArgumentNullException("Key");
+
+            if (IV == null || IV.Length <= 0)
+                throw new ArgumentNullException("IV");
+
+            byte[] encrypted;
+
+            // Create an Aes object
+            // with the specified key and IV.
+            using (Aes aesAlg = Aes.Create())
+            {
+                aesAlg.Key = Key;
+                aesAlg.IV = IV;
+
+                // Create an encryptor to perform the stream transform.
+                ICryptoTransform encryptor = aesAlg.CreateEncryptor(aesAlg.Key, aesAlg.IV);
+
+                // Create the streams used for encryption.
+                using (MemoryStream msEncrypt = new MemoryStream())
+                {
+                    using (CryptoStream csEncrypt = new CryptoStream(msEncrypt, encryptor, CryptoStreamMode.Write))
+                    {
+                        using (StreamWriter swEncrypt = new StreamWriter(csEncrypt))
+                        {
+                            //Write all data to the stream.
+                            swEncrypt.Write(plainText);
+                            swEncrypt.Flush();
+                        }
+                        encrypted = msEncrypt.ToArray();
+                    }
+                }
             }
-            catch { }
-            finally { miRijndael.Dispose(); }
-            }
-            else
-            {return "erreur inconnue !";}
-            return returnValue;
+            // Return the encrypted bytes from the memory stream.
+            return encrypted;
         }
-        
-        // Decripte a partir de la clé mise en forme. 
-        public static string Desencriptar(byte[] bytDesEncriptar, string strPK)
+
+        public static string DecryptStringFromBytes_Aes(byte[] cipherText, byte[] Key, byte[] IV)
         {
-            clepseudoaleatoire = (new Rfc2898DeriveBytes(strPK, saltArray)).GetBytes(32);
-            return Desencriptar(bytDesEncriptar, clepseudoaleatoire);
+            // Check arguments.
+            if (cipherText == null || cipherText.Length <= 0)
+                throw new ArgumentNullException("cipherText");
+
+            if (Key == null || Key.Length <= 0)
+                throw new ArgumentNullException("Key");
+
+            if (IV == null || IV.Length <= 0)
+                throw new ArgumentNullException("IV");
+
+            // Declare the string used to hold
+            // the decrypted text.
+            string plaintext = null;
+
+            // Create an Aes object
+            using (Aes aesAlg = Aes.Create())
+            {
+                aesAlg.Key = Key;
+                aesAlg.IV = IV;
+
+                // Create a decryptor to perform the stream transform.
+                ICryptoTransform decryptor = aesAlg.CreateDecryptor(aesAlg.Key, aesAlg.IV);
+
+                // Create the streams used for decryption.
+                using (MemoryStream msDecrypt = new MemoryStream(cipherText))
+                {
+                    using (CryptoStream csDecrypt = new CryptoStream(msDecrypt, decryptor, CryptoStreamMode.Read))
+                    {
+                        using (StreamReader srDecrypt = new StreamReader(csDecrypt))
+                        {
+
+                            // Read the decrypted bytes from the decrypting stream
+                            // and place them in a string.
+                            plaintext = srDecrypt.ReadToEnd();
+                        }
+                    }
+                }
+            }
+
+            return plaintext;
         }
     }
 }
